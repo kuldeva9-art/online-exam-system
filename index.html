@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ExamFlow Pro - Modern, secure, role-based online examination portal with instant auto-grading, proctoring, and certification.">
+    <title>ExamFlow Pro - Online Examination System</title>
+    
+    <!-- Design System CSS -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <!-- Main Navigation Bar -->
+    <nav class="main-navbar" id="main-nav" style="display: none;">
+        <a href="#" class="nav-brand" onclick="window.app.renderCurrentView()">
+            <div class="brand-icon">⚡</div>
+            <span>ExamFlow <strong style="color: var(--primary);">Pro</strong></span>
+        </a>
+
+        <div class="nav-user-area" id="nav-user-area">
+            <!-- Dynamically populated by app.js -->
+        </div>
+    </nav>
+
+    <!-- ======================================================================
+         VIEW 1: AUTHENTICATION (LOGIN & REGISTRATION)
+         ====================================================================== -->
+    <section class="app-view active" id="auth-view">
+        <div class="auth-container">
+            <div class="auth-card">
+                <div class="auth-header">
+                    <div class="brand-icon">⚡</div>
+                    <h1 class="auth-title">ExamFlow Pro</h1>
+                    <p class="auth-subtitle">Enterprise Online Examination & Assessment System</p>
+                </div>
+
+                <!-- Auth Mode Tabs -->
+                <div class="auth-tabs">
+                    <button class="auth-tab-btn active" id="auth-tab-login" onclick="window.app.switchAuthTab('login')">
+                        Sign In
+                    </button>
+                    <button class="auth-tab-btn" id="auth-tab-register" onclick="window.app.switchAuthTab('register')">
+                        Create Account
+                    </button>
+                </div>
+
+                <!-- Login Form -->
+                <div id="login-form-container">
+                    <form id="login-form">
+                        <div class="form-group">
+                            <label class="form-label" for="login-email">Email Address</label>
+                            <input type="email" id="login-email" class="form-input" placeholder="admin@exam.com" value="admin@exam.com" required autocomplete="email">
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="login-password">Password</label>
+                            <input type="password" id="login-password" class="form-input" placeholder="••••••••" value="admin123" required autocomplete="current-password">
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-full btn-lg mt-4">
+                            Sign In to Portal 🚀
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Register Form -->
+                <div id="register-form-container" style="display: none;">
+                    <form id="register-form">
+                        <div class="form-group">
+                            <label class="form-label" for="reg-name">Full Name</label>
+                            <input type="text" id="reg-name" class="form-input" placeholder="e.g. Jordan Smith" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="reg-email">Email Address</label>
+                            <input type="email" id="reg-email" class="form-input" placeholder="jordan@university.edu" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="reg-password">Password</label>
+                            <input type="password" id="reg-password" class="form-input" placeholder="At least 6 characters" required>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" for="reg-role">I am joining as</label>
+                            <select id="reg-role" class="form-input" onchange="window.app.onRoleSelectChange(this.value)">
+                                <option value="student" selected>Student Candidate</option>
+                                <option value="teacher">Teacher / Instructor</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label" id="reg-extra-label" for="reg-extra">Roll Number / Student ID</label>
+                            <input type="text" id="reg-extra" class="form-input" placeholder="e.g. CS-2026-088" required>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-full btn-lg mt-4">
+                            Register Account ✨
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Quick Demo Login Presets -->
+                <div class="demo-credentials-box">
+                    <div class="demo-title">⚡ 1-Click Quick Demo Logins</div>
+                    <div class="demo-buttons-grid">
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('admin')">
+                            👑 Admin
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('teacher')">
+                            👨‍🏫 Teacher
+                        </button>
+                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('student')">
+                            🎓 Student
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 2: ADMIN PORTAL
+         ====================================================================== -->
+    <section class="app-view" id="admin-portal">
+        <div class="portal-container" id="admin-content-area">
+            <!-- Dynamically rendered by admin.js -->
+        </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 3: TEACHER PORTAL
+         ====================================================================== -->
+    <section class="app-view" id="teacher-portal">
+        <div class="portal-container" id="teacher-content-area">
+            <!-- Dynamically rendered by teacher.js -->
+        </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 4: STUDENT PORTAL
+         ====================================================================== -->
+    <section class="app-view" id="student-portal">
+        <div class="portal-container" id="student-content-area">
+            <!-- Dynamically rendered by student.js -->
+        </div>
+    </section>
+
+    <!-- ======================================================================
+         VIEW 5: LIVE EXAM ROOM (PROCTORED EXPERIENCE)
+         ====================================================================== -->
+    <section class="app-view" id="live-exam-room">
+        <!-- Dynamically rendered by student.js -->
+    </section>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Global Modal Root -->
+    <div id="global-modal-root"></div>
+
+    <!-- Scripts (Database first, then Auth, Role Controllers, and App Coordinator) -->
+    <script src="js/db.js"></script>
+    <script src="js/auth.js"></script>
+    <script src="js/admin.js"></script>
+    <script src="js/teacher.js"></script>
+    <script src="js/student.js"></script>
+    <script src="js/app.js"></script>
+</body>
+</html>
