@@ -1817,12 +1817,12 @@ body::after {
                     <form id="login-form">
                         <div class="form-group">
                             <label class="form-label" for="login-email">Email Address</label>
-                            <input type="email" id="login-email" class="form-input" placeholder="admin@exam.com" value="admin@exam.com" required autocomplete="email">
+                            <input type="email" id="login-email" class="form-input" placeholder="e.g. user@exam.com" required autocomplete="email">
                         </div>
 
                         <div class="form-group">
                             <label class="form-label" for="login-password">Password</label>
-                            <input type="password" id="login-password" class="form-input" placeholder="••••••••" value="admin123" required autocomplete="current-password">
+                            <input type="password" id="login-password" class="form-input" placeholder="••••••••" required autocomplete="current-password">
                         </div>
 
                         <button type="submit" class="btn btn-primary btn-full btn-lg mt-4">
@@ -1866,22 +1866,6 @@ body::after {
                             Register Account ✨
                         </button>
                     </form>
-                </div>
-
-                <!-- Quick Demo Login Presets -->
-                <div class="demo-credentials-box">
-                    <div class="demo-title">⚡ 1-Click Quick Demo Logins</div>
-                    <div class="demo-buttons-grid">
-                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('admin')">
-                            👑 Admin
-                        </button>
-                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('teacher')">
-                            👨‍🏫 Teacher
-                        </button>
-                        <button type="button" class="btn btn-secondary btn-xs" onclick="window.app.quickSwitch('student')">
-                            🎓 Student
-                        </button>
-                    </div>
                 </div>
             </div>
         </div>
@@ -2480,25 +2464,6 @@ class AuthManager {
         window.db.logActivity(user.name, 'USER_LOGIN', `User ${user.name} (${user.role}) logged in successfully.`);
         
         return { success: true, user: user };
-    }
-
-    quickLogin(role) {
-        let user = null;
-        if (role === 'admin') {
-            user = window.db.getUserByEmail('admin@exam.com');
-        } else if (role === 'teacher') {
-            user = window.db.getUserByEmail('teacher@exam.com');
-        } else if (role === 'student') {
-            user = window.db.getUserByEmail('student@exam.com');
-        }
-
-        if (user) {
-            this.currentUser = user;
-            localStorage.setItem(this.SESSION_KEY, JSON.stringify(user));
-            window.db.logActivity(user.name, 'QUICK_LOGIN', `Quick switched to role: ${role}`);
-            return { success: true, user: user };
-        }
-        return { success: false, message: 'Default demo account not found.' };
     }
 
     register(data) {
@@ -5200,13 +5165,6 @@ class App {
         };
 
         navRight.innerHTML = `
-            <div class="nav-demo-switch">
-                <span class="text-xs text-muted">Demo Switch:</span>
-                <button class="btn btn-ghost btn-xs ${user.role === 'admin' ? 'active-role' : ''}" onclick="window.app.quickSwitch('admin')" title="Switch to Admin">Admin</button>
-                <button class="btn btn-ghost btn-xs ${user.role === 'teacher' ? 'active-role' : ''}" onclick="window.app.quickSwitch('teacher')" title="Switch to Teacher">Teacher</button>
-                <button class="btn btn-ghost btn-xs ${user.role === 'student' ? 'active-role' : ''}" onclick="window.app.quickSwitch('student')" title="Switch to Student">Student</button>
-            </div>
-
             <div class="user-profile-menu">
                 <img src="${user.avatar || 'https://api.dicebear.com/7.x/initials/svg?seed=' + user.name}" class="avatar-sm" alt="${user.name}">
                 <div class="user-info-text">
@@ -5253,16 +5211,6 @@ class App {
 
         if (res.success) {
             this.showToast(`Account created! Welcome, ${res.user.name}`, 'success');
-            this.renderCurrentView();
-        } else {
-            this.showToast(res.message, 'error');
-        }
-    }
-
-    quickSwitch(role) {
-        const res = window.auth.quickLogin(role);
-        if (res.success) {
-            this.showToast(`Switched account to ${res.user.name} (${role.toUpperCase()})`, 'info');
             this.renderCurrentView();
         } else {
             this.showToast(res.message, 'error');
