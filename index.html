@@ -3252,6 +3252,9 @@ class TeacherController {
                     <p class="portal-subtitle">Welcome back, ${user.name}. Manage your assessments, questions, and student evaluations.</p>
                 </div>
                 <div class="portal-actions">
+                    <button class="btn btn-secondary btn-sm" onclick="window.teacherCtrl.openExcelImportModal()">
+                        <span class="icon">📊</span> Bulk Upload Excel/CSV
+                    </button>
                     <button class="btn btn-secondary btn-sm" onclick="window.teacherCtrl.openQuestionModal()">
                         <span class="icon">❓</span> Add Question
                     </button>
@@ -3391,6 +3394,12 @@ class TeacherController {
                         <p class="card-subtitle">Manage multiple-choice, true/false, and open-ended question assets.</p>
                     </div>
                     <div class="filters-row">
+                        <button class="btn btn-secondary btn-sm" onclick="window.teacherCtrl.downloadQuestionTemplate()">
+                            <span class="icon">📥</span> Excel Template
+                        </button>
+                        <button class="btn btn-primary btn-sm" onclick="window.teacherCtrl.openExcelImportModal()">
+                            <span class="icon">📊</span> Bulk Upload Excel/CSV
+                        </button>
                         <select id="filter-subject" class="form-input form-input-sm" onchange="window.teacherCtrl.filterQuestions()">
                             <option value="">All Subjects</option>
                             ${subjects.map(s => `<option value="${s.id}">${s.name}</option>`).join('')}
@@ -4168,6 +4177,343 @@ class TeacherController {
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
         window.app.showToast('Results exported to CSV!', 'success');
+    }
+
+    // ==========================================
+    // EXCEL / CSV BULK QUESTION IMPORT
+    // ==========================================
+
+    downloadQuestionTemplate() {
+        const csvContent = 
+            `SubjectCode,Type,QuestionText,OptionA,OptionB,OptionC,OptionD,CorrectAnswer,Points,Difficulty,Explanation\n` +
+            `CS-101,mcq,"What is the average time complexity of searching in a balanced BST?",O(1),O(log n),O(n),O(n log n),B,2,medium,"Balanced BST search operations take O(log n) time."\n` +
+            `CS-101,tf,"A Queue operates on the First-In First-Out (FIFO) principle.",True,False,,,A,1,easy,"Queues maintain FIFO ordering."\n` +
+            `WEB-202,multi,"Which of the following are standard HTML5 semantic layout elements?",<div>,<section>,<customized>,<header>,B;D,3,medium,"section and header are standard semantic tags."\n` +
+            `WEB-202,short,"Which network protocol secures browser communication with SSL/TLS?",HTTP,HTTPS,SSL,TLS,https,2,easy,"HTTPS encrypts HTTP traffic."\n`;
+
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `examflow-questions-template.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        window.app.showToast('Question Excel/CSV template downloaded!', 'success');
+    }
+
+    openExcelImportModal() {
+        const subjects = window.db.getAll('subjects');
+        const modalHtml = `
+            <div class="modal-backdrop" id="teacher-excel-modal">
+                <div class="modal-card modal-lg">
+                    <div class="modal-header">
+                        <div>
+                            <h3 class="modal-title">📊 Bulk Import Questions (Excel / CSV)</h3>
+                            <p class="modal-subtitle">Upload multiple questions at once using a formatted template file.</p>
+                        </div>
+                        <button class="modal-close" onclick="window.app.closeModal('teacher-excel-modal')">&times;</button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="excel-import-guide">
+                            <div class="guide-step">
+                                <strong>Step 1: Download Official Template</strong>
+                                <p class="text-xs text-muted">Use our pre-formatted CSV template compatible with Microsoft Excel, Google Sheets, and Apple Numbers.</p>
+                                <button type="button" class="btn btn-secondary btn-xs mt-2" onclick="window.teacherCtrl.downloadQuestionTemplate()">
+                                    📥 Download Question Template (.csv)
+                                </button>
+                            </div>
+
+                            <div class="guide-step mt-3">
+                                <strong>Step 2: Default Subject (Fallback if Subject Code in file is unassigned)</strong>
+                                <select id="import-default-subject" class="form-input form-input-sm mt-1">
+                                    ${subjects.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('')}
+                                </select>
+                            </div>
+
+                            <div class="guide-step mt-3">
+                                <strong>Step 3: Select Excel / CSV File</strong>
+                                <input type="file" id="excel-file-input" accept=".csv, .txt, .xlsx, .xls" class="form-input mt-1" onchange="window.teacherCtrl.handleFileSelect(event)">
+                            </div>
+                        </div>
+
+                        <div id="excel-preview-area" class="mt-4" style="display: none;">
+                            <h4 class="text-sm font-semibold mb-2">Parsed Questions Preview</h4>
+                            <div class="table-responsive" style="max-height: 250px; overflow-y: auto;">
+                                <table class="data-table" id="preview-table">
+                                    <thead>
+                                        <tr>
+                                            <th>#</th>
+                                            <th>Subject</th>
+                                            <th>Type</th>
+                                            <th>Question Text</th>
+                                            <th>Correct Key</th>
+                                            <th>Points</th>
+                                            <th>Status</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-table-body"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" onclick="window.app.closeModal('teacher-excel-modal')">Cancel</button>
+                        <button type="button" class="btn btn-success" id="btn-confirm-import" disabled onclick="window.teacherCtrl.confirmImport()">
+                            🚀 Confirm & Import Questions
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        window.app.openModal(modalHtml);
+        this.parsedQuestionsToImport = [];
+    }
+
+    handleFileSelect(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const text = e.target.result;
+            const parsed = this.parseCSVToQuestions(text);
+            this.parsedQuestionsToImport = parsed;
+            this.renderPreviewTable(parsed);
+        };
+        reader.readAsText(file);
+    }
+
+    parseCSV(text) {
+        const lines = [];
+        let curLine = [];
+        let curVal = '';
+        let inQuotes = false;
+
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            const nextC = text[i + 1];
+
+            if (c === '"') {
+                if (inQuotes && nextC === '"') {
+                    curVal += '"';
+                    i++;
+                } else {
+                    inQuotes = !inQuotes;
+                }
+            } else if ((c === ',' || c === '\t') && !inQuotes) {
+                curLine.push(curVal.trim());
+                curVal = '';
+            } else if ((c === '\r' || c === '\n') && !inQuotes) {
+                if (c === '\r' && nextC === '\n') i++;
+                curLine.push(curVal.trim());
+                if (curLine.some(cell => cell.length > 0)) {
+                    lines.push(curLine);
+                }
+                curLine = [];
+                curVal = '';
+            } else {
+                curVal += c;
+            }
+        }
+        if (curVal.length > 0 || curLine.length > 0) {
+            curLine.push(curVal.trim());
+            lines.push(curLine);
+        }
+        return lines;
+    }
+
+    parseCSVToQuestions(csvText) {
+        const rows = this.parseCSV(csvText);
+        if (rows.length < 2) return [];
+
+        const header = rows[0].map(h => h.toLowerCase().replace(/[^a-z0-9]/g, ''));
+        
+        const colSubject = header.findIndex(h => h.includes('subject'));
+        const colType = header.findIndex(h => h.includes('type'));
+        const colText = header.findIndex(h => h.includes('question') || h.includes('text') || h.includes('prompt'));
+        const colOptA = header.findIndex(h => h.includes('optiona') || h.includes('opta'));
+        const colOptB = header.findIndex(h => h.includes('optionb') || h.includes('optb'));
+        const colOptC = header.findIndex(h => h.includes('optionc') || h.includes('optc'));
+        const colOptD = header.findIndex(h => h.includes('optiond') || h.includes('optd'));
+        const colAns = header.findIndex(h => h.includes('correct') || h.includes('answer') || h.includes('key'));
+        const colPts = header.findIndex(h => h.includes('point') || h.includes('mark'));
+        const colDiff = header.findIndex(h => h.includes('diff'));
+        const colExp = header.findIndex(h => h.includes('explain') || h.includes('solution'));
+
+        const subjects = window.db.getAll('subjects');
+        const defaultSubEl = document.getElementById('import-default-subject');
+        const defaultSubId = defaultSubEl ? defaultSubEl.value : (subjects[0] ? subjects[0].id : '');
+
+        const results = [];
+
+        for (let r = 1; r < rows.length; r++) {
+            const row = rows[r];
+            if (row.length === 0 || !row.some(cell => cell.length > 0)) continue;
+
+            const rawSub = colSubject !== -1 && row[colSubject] ? row[colSubject].trim() : '';
+            const rawType = colType !== -1 && row[colType] ? row[colType].trim().toLowerCase() : 'mcq';
+            const qText = colText !== -1 && row[colText] ? row[colText].trim() : (row[0] || '');
+            const optA = colOptA !== -1 && row[colOptA] ? row[colOptA].trim() : '';
+            const optB = colOptB !== -1 && row[colOptB] ? row[colOptB].trim() : '';
+            const optC = colOptC !== -1 && row[colOptC] ? row[colOptC].trim() : '';
+            const optD = colOptD !== -1 && row[colOptD] ? row[colOptD].trim() : '';
+            const rawAns = colAns !== -1 && row[colAns] ? row[colAns].trim() : '';
+            const pts = colPts !== -1 && row[colPts] ? parseInt(row[colPts]) || 1 : 1;
+            const diff = colDiff !== -1 && row[colDiff] ? row[colDiff].trim().toLowerCase() : 'medium';
+            const exp = colExp !== -1 && row[colExp] ? row[colExp].trim() : '';
+
+            let matchedSub = subjects.find(s => s.code.toLowerCase() === rawSub.toLowerCase() || s.name.toLowerCase() === rawSub.toLowerCase() || s.id === rawSub);
+            const subjectId = matchedSub ? matchedSub.id : defaultSubId;
+            const subjectName = matchedSub ? matchedSub.name : (window.db.getById('subjects', defaultSubId) ? window.db.getById('subjects', defaultSubId).name : 'General');
+
+            let type = 'mcq';
+            if (rawType.includes('multi') || rawType.includes('checkbox')) type = 'multi';
+            else if (rawType.includes('tf') || rawType.includes('true') || rawType.includes('boolean')) type = 'tf';
+            else if (rawType.includes('short') || rawType.includes('text')) type = 'short';
+
+            let options = [];
+            let correctAnswers = [];
+            let isValid = true;
+            let errorMsg = '';
+
+            if (!qText) {
+                isValid = false;
+                errorMsg = 'Missing Question Text';
+            }
+
+            if (type === 'mcq' || type === 'multi') {
+                options = [optA, optB, optC, optD].filter(Boolean);
+                if (options.length < 2) {
+                    isValid = false;
+                    errorMsg = 'Requires at least 2 options';
+                }
+            } else if (type === 'tf') {
+                options = ['True', 'False'];
+            }
+
+            if (isValid) {
+                if (type === 'mcq') {
+                    const mapLetter = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, '1': 0, '2': 1, '3': 2, '4': 3, '0': 0 };
+                    const normAns = rawAns.toLowerCase();
+                    if (mapLetter[normAns] !== undefined && mapLetter[normAns] < options.length) {
+                        correctAnswers = [mapLetter[normAns]];
+                    } else {
+                        const matchedIdx = options.findIndex(o => o.toLowerCase() === normAns);
+                        if (matchedIdx !== -1) {
+                            correctAnswers = [matchedIdx];
+                        } else {
+                            correctAnswers = [0];
+                        }
+                    }
+                } else if (type === 'multi') {
+                    const parts = rawAns.split(/[,;\s/]+/).map(p => p.trim().toLowerCase()).filter(Boolean);
+                    const mapLetter = { 'a': 0, 'b': 1, 'c': 2, 'd': 3, '1': 0, '2': 1, '3': 2, '4': 3, '0': 0 };
+                    parts.forEach(p => {
+                        if (mapLetter[p] !== undefined && mapLetter[p] < options.length) {
+                            correctAnswers.push(mapLetter[p]);
+                        } else {
+                            const matchedIdx = options.findIndex(o => o.toLowerCase() === p);
+                            if (matchedIdx !== -1) correctAnswers.push(matchedIdx);
+                        }
+                    });
+                    if (correctAnswers.length === 0) correctAnswers = [0];
+                } else if (type === 'tf') {
+                    const normAns = rawAns.toLowerCase();
+                    if (normAns === 'true' || normAns === 't' || normAns === 'a' || normAns === '0') {
+                        correctAnswers = [0];
+                    } else {
+                        correctAnswers = [1];
+                    }
+                } else if (type === 'short') {
+                    correctAnswers = rawAns.split(/[,;]+/).map(k => k.trim().toLowerCase()).filter(Boolean);
+                    if (correctAnswers.length === 0) correctAnswers = [rawAns.toLowerCase()];
+                }
+            }
+
+            results.push({
+                subjectId,
+                subjectName,
+                type,
+                text: qText,
+                options,
+                correctAnswers,
+                explanation: exp,
+                points: pts,
+                difficulty: diff,
+                isValid,
+                errorMsg
+            });
+        }
+
+        return results;
+    }
+
+    renderPreviewTable(parsed) {
+        const area = document.getElementById('excel-preview-area');
+        const tbody = document.getElementById('preview-table-body');
+        const btnConfirm = document.getElementById('btn-confirm-import');
+
+        if (!area || !tbody) return;
+
+        area.style.display = 'block';
+        const validCount = parsed.filter(p => p.isValid).length;
+
+        tbody.innerHTML = parsed.map((item, idx) => `
+            <tr class="${item.isValid ? '' : 'table-danger'}">
+                <td>${idx + 1}</td>
+                <td><span class="badge badge-info">${item.subjectName}</span></td>
+                <td><span class="badge badge-secondary">${item.type.toUpperCase()}</span></td>
+                <td><strong>${item.text}</strong></td>
+                <td><span class="text-xs text-success">${JSON.stringify(item.correctAnswers)}</span></td>
+                <td>${item.points} pt${item.points > 1 ? 's' : ''}</td>
+                <td>
+                    <span class="badge ${item.isValid ? 'badge-success' : 'badge-danger'}">
+                        ${item.isValid ? 'Valid ✓' : 'Invalid: ' + item.errorMsg}
+                    </span>
+                </td>
+            </tr>
+        `).join('');
+
+        if (btnConfirm) {
+            btnConfirm.disabled = validCount === 0;
+            btnConfirm.textContent = `🚀 Confirm & Import ${validCount} Questions`;
+        }
+    }
+
+    confirmImport() {
+        const user = window.auth.getCurrentUser();
+        const validItems = (this.parsedQuestionsToImport || []).filter(p => p.isValid);
+
+        if (validItems.length === 0) {
+            window.app.showToast('No valid questions to import.', 'error');
+            return;
+        }
+
+        let count = 0;
+        validItems.forEach(item => {
+            const newQuestion = {
+                id: 'q_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+                subjectId: item.subjectId,
+                teacherId: user.id,
+                type: item.type,
+                text: item.text,
+                options: item.options,
+                correctAnswers: item.correctAnswers,
+                explanation: item.explanation,
+                points: item.points,
+                difficulty: item.difficulty,
+                createdAt: new Date().toISOString()
+            };
+            window.db.insert('questions', newQuestion);
+            count++;
+        });
+
+        window.db.logActivity(user.name, 'QUESTIONS_IMPORTED', `Bulk imported ${count} questions via Excel/CSV`);
+        window.app.closeModal('teacher-excel-modal');
+        window.app.showToast(`Successfully imported ${count} questions into Question Bank!`, 'success');
+        this.render();
     }
 }
 
