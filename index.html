@@ -5676,14 +5676,15 @@ class App {
 
 window.app = new App();
     </script>
-<!-- 🔥 Firebase Global Sync (Fixed API Key) 🔥 -->
+<!-- 🔥 Firebase Global Sync (Anti-Crash Version) 🔥 -->
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
     <script>
-        // 1. Tumcha Firebase Config (API Key Fixed)
+    try {
+        // 1. Firebase Config (तुमची API Key बरोबर आहे)
         const firebaseConfig = {
-            apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpiU", // <-- Tithe 'U' missing hota
+            apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpiU",
             authDomain: "examflow-af13d.firebaseapp.com",
             projectId: "examflow-af13d",
             storageBucket: "examflow-af13d.firebasestorage.app",
@@ -5691,72 +5692,82 @@ window.app = new App();
             appId: "1:719331439003:web:08208cccddcb476290313e"
         };
 
-        // 2. Firebase chalu karne
-        firebase.initializeApp(firebaseConfig);
+        // 2. Firebase App आधीच चालू असेल तर एरर येऊ नये याची काळजी
+        if (!firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
         const cloudDB = firebase.firestore();
 
-        // 3. Website purna load jhalyavar data global sync karne
-        window.addEventListener('load', function() {
-            if(!window.db) return;
+        // 3. डेटा सिंक करण्याची प्रोसेस
+        let checkDbInterval = setInterval(() => {
+            if(window.db && window.db.insert) {
+                clearInterval(checkDbInterval);
+                
+                const collections = ['users', 'exams', 'questions', 'submissions', 'subjects'];
 
-            const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
+                // Firebase वरून डेटा वाचणे (Real-Time)
+                collections.forEach(col => {
+                    cloudDB.collection(col).onSnapshot((snapshot) => {
+                        let isChanged = false;
+                        if(!window.db.data[col]) window.db.data[col] = [];
 
-            // A) Firebase varun data ghene
-            collectionsToSync.forEach(colName => {
-                cloudDB.collection(colName).onSnapshot((snapshot) => {
-                    let isChanged = false;
-                    if(!window.db.data[colName]) window.db.data[colName] = [];
+                        snapshot.docChanges().forEach((change) => {
+                            const data = change.doc.data();
+                            const idx = window.db.data[col].findIndex(x => x.id === data.id);
 
-                    snapshot.docChanges().forEach((change) => {
-                        const data = change.doc.data();
-                        const idx = window.db.data[colName].findIndex(x => x.id === data.id);
+                            if (change.type === "added" || change.type === "modified") {
+                                if (idx === -1) window.db.data[col].push(data);
+                                else window.db.data[col][idx] = data;
+                                isChanged = true;
+                            }
+                            if (change.type === "removed") {
+                                window.db.data[col] = window.db.data[col].filter(x => x.id !== data.id);
+                                isChanged = true;
+                            }
+                        });
 
-                        if (change.type === "added" || change.type === "modified") {
-                            if (idx === -1) window.db.data[colName].push(data);
-                            else window.db.data[colName][idx] = data;
-                            isChanged = true;
-                        }
-                        if (change.type === "removed") {
-                            window.db.data[colName] = window.db.data[colName].filter(x => x.id !== data.id);
-                            isChanged = true;
+                        if (isChanged) {
+                            window.db.save();
+                            if(window.app && window.auth && window.auth.isAuthenticated()) {
+                                window.app.renderCurrentView();
+                            }
                         }
                     });
-
-                    if (isChanged) {
-                        window.db.save(); 
-                        if(window.app && window.auth && window.auth.isAuthenticated()) {
-                            window.app.renderCurrentView();
-                        }
-                    }
                 });
-            });
 
-            // B) Data Firebase la pathavne (Undefined error fixed)
-            const oldInsert = window.db.insert.bind(window.db);
-            window.db.insert = function(colName, item) {
-                const res = oldInsert(colName, item);
-                const cleanData = JSON.parse(JSON.stringify(res));
-                cloudDB.collection(colName).doc(cleanData.id).set(cleanData).catch(e => console.error(e));
-                return res;
-            };
+                // Firebase वर डेटा पाठवणे
+                const oldInsert = window.db.insert.bind(window.db);
+                window.db.insert = function(col, item) {
+                    const res = oldInsert(col, item);
+                    const clean = JSON.parse(JSON.stringify(res)); // Undefined Error Fix
+                    cloudDB.collection(col).doc(clean.id).set(clean).catch(e=>console.log(e));
+                    return res;
+                };
 
-            const oldUpdate = window.db.update.bind(window.db);
-            window.db.update = function(colName, id, updates) {
-                const res = oldUpdate(colName, id, updates);
-                if(res) {
-                    const cleanData = JSON.parse(JSON.stringify(res));
-                    cloudDB.collection(colName).doc(id).set(cleanData, {merge: true}).catch(e=>console.error(e));
-                }
-                return res;
-            };
+                const oldUpdate = window.db.update.bind(window.db);
+                window.db.update = function(col, id, updates) {
+                    const res = oldUpdate(col, id, updates);
+                    if(res) {
+                        const clean = JSON.parse(JSON.stringify(res));
+                        cloudDB.collection(col).doc(id).set(clean, {merge:true}).catch(e=>console.log(e));
+                    }
+                    return res;
+                };
 
-            const oldDelete = window.db.delete.bind(window.db);
-            window.db.delete = function(colName, id) {
-                const res = oldDelete(colName, id);
-                if(res) cloudDB.collection(colName).doc(id).delete();
-                return res;
-            };
-        });
+                const oldDelete = window.db.delete.bind(window.db);
+                window.db.delete = function(col, id) {
+                    const res = oldDelete(col, id);
+                    if(res) cloudDB.collection(col).doc(id).delete().catch(e=>console.log(e));
+                    return res;
+                };
+                console.log("Global System Active!");
+            }
+        }, 500);
+
+    } catch(error) {
+        console.error("Firebase Load Error: ", error);
+        alert("System Error: " + error.message);
+    }
     </script>
 </body>
 </html>
