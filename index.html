@@ -5676,10 +5676,10 @@ class App {
 
 window.app = new App();
     </script>
-    <!-- 🔥 Firebase Integration Code 🔥 -->
+<!-- 🔥 Firebase Global Sync Code (Read & Write) 🔥 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         // तुमचा Firebase Config
         const firebaseConfig = {
@@ -5691,28 +5691,73 @@ window.app = new App();
             appId: "1:719331439003:web:08208cccddcb476290313e"
         };
 
-        // Firebase चालू करणे
         const app = initializeApp(firebaseConfig);
         const cloudDB = getFirestore(app);
 
-        // जुन्या कोडला धक्का न लावता Firebase ला डेटा पाठवणारी सिस्टीम
-        setTimeout(() => {
-            if(window.db && window.db.insert) {
+        // वेबसाईट लोड झाल्यावर Firebase शी कनेक्ट करण्याची सिस्टीम
+        setTimeout(async () => {
+            if(window.db) {
+                console.log("Global Server शी कनेक्ट होत आहे...");
+
+                // १. Firebase वरून सगळा डेटा 'वाचून' (Read) सर्व विद्यार्थ्यांपर्यंत पोहोचवणे
+                const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
+                let dataUpdated = false;
+
+                for(let colName of collectionsToSync) {
+                    try {
+                        const snap = await getDocs(collection(cloudDB, colName));
+                        if(!snap.empty) {
+                            if(!window.db.data[colName]) window.db.data[colName] = [];
+                            
+                            snap.forEach(docSnap => {
+                                const cloudData = docSnap.data();
+                                const localIndex = window.db.data[colName].findIndex(x => x.id === cloudData.id);
+                                
+                                if(localIndex === -1) {
+                                    window.db.data[colName].push(cloudData); // नवीन डेटा ऍड करणे
+                                    dataUpdated = true;
+                                } else {
+                                    window.db.data[colName][localIndex] = cloudData; // जुना डेटा अपडेट करणे
+                                }
+                            });
+                        }
+                    } catch(e) { console.error("डेटा सिंक करताना एरर: ", e); }
+                }
+
+                // जर नवीन डेटा आला असेल तर स्क्रीन रिफ्रेश करणे
+                if(dataUpdated) {
+                    window.db.save(); 
+                    if(window.app) window.app.renderCurrentView();
+                    console.log("ग्लोबल डेटा यशस्वीरित्या सिंक झाला!");
+                }
+
+                // २. नवीन तयार केलेला डेटा थेट Firebase वर 'पाठवणे' (Write)
                 const originalInsert = window.db.insert.bind(window.db);
-                window.db.insert = function(collectionName, item) {
-                    const result = originalInsert(collectionName, item); // जुने काम चालू राहील
-                    
-                    // सोबतच Firebase वर डेटा जाईल
-                    if (collectionName === 'submissions' || collectionName === 'users') {
-                        const docRef = doc(cloudDB, collectionName, result.id);
-                        setDoc(docRef, result)
-                            .then(() => console.log("Firebase वर डेटा यशस्वीरित्या गेला!"))
-                            .catch((e) => console.error("Firebase Error: ", e));
+                window.db.insert = function(colName, item) {
+                    const result = originalInsert(colName, item);
+                    setDoc(doc(cloudDB, colName, result.id), result).catch(e=>console.log(e)); // क्लाउडवर सेव्ह
+                    return result;
+                };
+
+                const originalUpdate = window.db.update.bind(window.db);
+                window.db.update = function(colName, id, updates) {
+                    const result = originalUpdate(colName, id, updates);
+                    if(result) {
+                        setDoc(doc(cloudDB, colName, id), result, {merge: true}).catch(e=>console.log(e));
+                    }
+                    return result;
+                };
+
+                const originalDelete = window.db.delete.bind(window.db);
+                window.db.delete = function(colName, id) {
+                    const result = originalDelete(colName, id);
+                    if(result) {
+                        deleteDoc(doc(cloudDB, colName, id)).catch(e=>console.log(e));
                     }
                     return result;
                 };
             }
-        }, 1000);
+        }, 1200); // वेबसाईट लोड झाल्यानंतर १ सेकंदाने डेटा कनेक्ट होईल
     </script>
 </body>
 </html>
