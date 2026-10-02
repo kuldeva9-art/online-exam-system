@@ -5676,12 +5676,12 @@ class App {
 
 window.app = new App();
     </script>
-<!-- 🔥 Firebase Real-Time Global Sync (Auto Update) 🔥 -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+<!-- 🔥 Firebase Global Sync (अतिशय सुरक्षित आणि सोपा कोड) 🔥 -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
-        // तुमचा Firebase Config
+    <script>
+        // १. तुमचा Firebase Config
         const firebaseConfig = {
             apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpi",
             authDomain: "examflow-af13d.firebaseapp.com",
@@ -5691,78 +5691,69 @@ window.app = new App();
             appId: "1:719331439003:web:08208cccddcb476290313e"
         };
 
-        const app = initializeApp(firebaseConfig);
-        const cloudDB = getFirestore(app);
+        // २. Firebase चालू करणे
+        firebase.initializeApp(firebaseConfig);
+        const cloudDB = firebase.firestore();
 
-        // वेबसाईट सुरू होताच Real-Time Sync चालू करणे
-        const checkDB = setInterval(() => {
-            if(window.db && window.db.insert) {
-                clearInterval(checkDB);
-                console.log("Firebase Real-Time Sync चालू झाले!");
+        // ३. वेबसाईट पूर्ण लोड झाल्यावर डेटा ग्लोबल सिंक करणे
+        window.addEventListener('load', function() {
+            if(!window.db) return;
 
-                const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
-                
-                // १. Firebase वरून रिअल-टाईम डेटा वाचणे (वाट्सॲप सारखे)
-                collectionsToSync.forEach(colName => {
-                    onSnapshot(collection(cloudDB, colName), (snapshot) => {
-                        let dataUpdated = false;
-                        if(!window.db.data[colName]) window.db.data[colName] = [];
-                        
-                        snapshot.docChanges().forEach((change) => {
-                            const cloudData = change.doc.data();
-                            
-                            if (change.type === "added" || change.type === "modified") {
-                                const localIndex = window.db.data[colName].findIndex(x => x.id === cloudData.id);
-                                if(localIndex === -1) {
-                                    window.db.data[colName].push(cloudData);
-                                } else {
-                                    window.db.data[colName][localIndex] = cloudData;
-                                }
-                                dataUpdated = true;
-                            }
-                            if (change.type === "removed") {
-                                window.db.data[colName] = window.db.data[colName].filter(x => x.id !== cloudData.id);
-                                dataUpdated = true;
-                            }
-                        });
+            const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
 
-                        if(dataUpdated) {
-                            window.db.save(); // ब्राउझरमध्ये सेव्ह करणे
-                            // जर युजर आधीच लॉगिन असेल, तर डॅशबोर्ड आपोआप रिफ्रेश करणे
-                            if(window.app && window.auth && window.auth.isAuthenticated()) {
-                                window.app.renderCurrentView();
-                            }
+            // A) Firebase वरून नवीन डेटा वेबसाईटवर घेणे (Real-Time)
+            collectionsToSync.forEach(colName => {
+                cloudDB.collection(colName).onSnapshot((snapshot) => {
+                    let isChanged = false;
+                    if(!window.db.data[colName]) window.db.data[colName] = [];
+
+                    snapshot.docChanges().forEach((change) => {
+                        const data = change.doc.data();
+                        const idx = window.db.data[colName].findIndex(x => x.id === data.id);
+
+                        if (change.type === "added" || change.type === "modified") {
+                            if (idx === -1) window.db.data[colName].push(data);
+                            else window.db.data[colName][idx] = data;
+                            isChanged = true;
+                        }
+                        if (change.type === "removed") {
+                            window.db.data[colName] = window.db.data[colName].filter(x => x.id !== data.id);
+                            isChanged = true;
                         }
                     });
+
+                    // नवीन डेटा आल्यास स्क्रीन आपोआप रिफ्रेश करणे
+                    if (isChanged) {
+                        window.db.save(); 
+                        if(window.app && window.auth && window.auth.isAuthenticated()) {
+                            window.app.renderCurrentView();
+                        }
+                    }
                 });
+            });
 
-                // २. नवीन रजिस्ट्रेशन किंवा एक्झाम डेटा Firebase वर पाठवणे
-                const originalInsert = window.db.insert.bind(window.db);
-                window.db.insert = function(colName, item) {
-                    const result = originalInsert(colName, item);
-                    setDoc(doc(cloudDB, colName, result.id), result).catch(e=>console.error("Firebase Insert Error:", e));
-                    return result;
-                };
+            // B) रजिस्टर केलेले अकाउंट किंवा दिलेली एक्झाम थेट Firebase ला पाठवणे
+            const oldInsert = window.db.insert.bind(window.db);
+            window.db.insert = function(colName, item) {
+                const res = oldInsert(colName, item);
+                cloudDB.collection(colName).doc(res.id).set(res).catch(e => console.error(e));
+                return res;
+            };
 
-                const originalUpdate = window.db.update.bind(window.db);
-                window.db.update = function(colName, id, updates) {
-                    const result = originalUpdate(colName, id, updates);
-                    if(result) {
-                        setDoc(doc(cloudDB, colName, id), result, {merge: true}).catch(e=>console.error(e));
-                    }
-                    return result;
-                };
+            const oldUpdate = window.db.update.bind(window.db);
+            window.db.update = function(colName, id, updates) {
+                const res = oldUpdate(colName, id, updates);
+                if(res) cloudDB.collection(colName).doc(id).set(res, {merge: true});
+                return res;
+            };
 
-                const originalDelete = window.db.delete.bind(window.db);
-                window.db.delete = function(colName, id) {
-                    const result = originalDelete(colName, id);
-                    if(result) {
-                        deleteDoc(doc(cloudDB, colName, id)).catch(e=>console.error(e));
-                    }
-                    return result;
-                };
-            }
-        }, 100); // डेटाबेस रेडी असल्याची प्रत्येक ०.१ सेकंदाला खात्री करतो
+            const oldDelete = window.db.delete.bind(window.db);
+            window.db.delete = function(colName, id) {
+                const res = oldDelete(colName, id);
+                if(res) cloudDB.collection(colName).doc(id).delete();
+                return res;
+            };
+        });
     </script>
 </body>
 </html>
