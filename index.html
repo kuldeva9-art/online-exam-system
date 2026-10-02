@@ -5676,7 +5676,7 @@ class App {
 
 window.app = new App();
     </script>
-<!-- 🔥 Firebase Global Sync (अतिशय सुरक्षित आणि सोपा कोड) 🔥 -->
+<!-- 🔥 Firebase Global Sync (Undefined Error Fixed) 🔥 -->
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
@@ -5722,7 +5722,6 @@ window.app = new App();
                         }
                     });
 
-                    // नवीन डेटा आल्यास स्क्रीन आपोआप रिफ्रेश करणे
                     if (isChanged) {
                         window.db.save(); 
                         if(window.app && window.auth && window.auth.isAuthenticated()) {
@@ -5732,18 +5731,24 @@ window.app = new App();
                 });
             });
 
-            // B) रजिस्टर केलेले अकाउंट किंवा दिलेली एक्झाम थेट Firebase ला पाठवणे
+            // B) अकाउंट किंवा डेटा Firebase ला पाठवणे (Undefined एरर फिक्स करून)
             const oldInsert = window.db.insert.bind(window.db);
             window.db.insert = function(colName, item) {
                 const res = oldInsert(colName, item);
-                cloudDB.collection(colName).doc(res.id).set(res).catch(e => console.error(e));
+                // undefined व्हॅल्यूज काढून डेटा स्वच्छ करणे
+                const cleanData = JSON.parse(JSON.stringify(res));
+                cloudDB.collection(colName).doc(cleanData.id).set(cleanData).catch(e => console.error(e));
                 return res;
             };
 
             const oldUpdate = window.db.update.bind(window.db);
             window.db.update = function(colName, id, updates) {
                 const res = oldUpdate(colName, id, updates);
-                if(res) cloudDB.collection(colName).doc(id).set(res, {merge: true});
+                if(res) {
+                    // undefined व्हॅल्यूज काढून डेटा स्वच्छ करणे
+                    const cleanData = JSON.parse(JSON.stringify(res));
+                    cloudDB.collection(colName).doc(id).set(cleanData, {merge: true}).catch(e=>console.error(e));
+                }
                 return res;
             };
 
