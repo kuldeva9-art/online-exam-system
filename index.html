@@ -5676,14 +5676,14 @@ class App {
 
 window.app = new App();
     </script>
-<!-- 🔥 Firebase Global Sync (Undefined Error Fixed) 🔥 -->
+<!-- 🔥 Firebase Global Sync (Fixed API Key) 🔥 -->
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore-compat.js"></script>
 
     <script>
-        // १. तुमचा Firebase Config
+        // 1. Tumcha Firebase Config (API Key Fixed)
         const firebaseConfig = {
-            apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpi",
+            apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpiU", // <-- Tithe 'U' missing hota
             authDomain: "examflow-af13d.firebaseapp.com",
             projectId: "examflow-af13d",
             storageBucket: "examflow-af13d.firebasestorage.app",
@@ -5691,17 +5691,17 @@ window.app = new App();
             appId: "1:719331439003:web:08208cccddcb476290313e"
         };
 
-        // २. Firebase चालू करणे
+        // 2. Firebase chalu karne
         firebase.initializeApp(firebaseConfig);
         const cloudDB = firebase.firestore();
 
-        // ३. वेबसाईट पूर्ण लोड झाल्यावर डेटा ग्लोबल सिंक करणे
+        // 3. Website purna load jhalyavar data global sync karne
         window.addEventListener('load', function() {
             if(!window.db) return;
 
             const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
 
-            // A) Firebase वरून नवीन डेटा वेबसाईटवर घेणे (Real-Time)
+            // A) Firebase varun data ghene
             collectionsToSync.forEach(colName => {
                 cloudDB.collection(colName).onSnapshot((snapshot) => {
                     let isChanged = false;
@@ -5731,11 +5731,10 @@ window.app = new App();
                 });
             });
 
-            // B) अकाउंट किंवा डेटा Firebase ला पाठवणे (Undefined एरर फिक्स करून)
+            // B) Data Firebase la pathavne (Undefined error fixed)
             const oldInsert = window.db.insert.bind(window.db);
             window.db.insert = function(colName, item) {
                 const res = oldInsert(colName, item);
-                // undefined व्हॅल्यूज काढून डेटा स्वच्छ करणे
                 const cleanData = JSON.parse(JSON.stringify(res));
                 cloudDB.collection(colName).doc(cleanData.id).set(cleanData).catch(e => console.error(e));
                 return res;
@@ -5745,7 +5744,6 @@ window.app = new App();
             window.db.update = function(colName, id, updates) {
                 const res = oldUpdate(colName, id, updates);
                 if(res) {
-                    // undefined व्हॅल्यूज काढून डेटा स्वच्छ करणे
                     const cleanData = JSON.parse(JSON.stringify(res));
                     cloudDB.collection(colName).doc(id).set(cleanData, {merge: true}).catch(e=>console.error(e));
                 }
