@@ -5676,10 +5676,10 @@ class App {
 
 window.app = new App();
     </script>
-<!-- 🔥 Firebase Global Sync Code (Read & Write) 🔥 -->
+<!-- 🔥 Firebase Real-Time Global Sync (Auto Update) 🔥 -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-        import { getFirestore, doc, setDoc, getDocs, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 
         // तुमचा Firebase Config
         const firebaseConfig = {
@@ -5694,48 +5694,53 @@ window.app = new App();
         const app = initializeApp(firebaseConfig);
         const cloudDB = getFirestore(app);
 
-        // वेबसाईट लोड झाल्यावर Firebase शी कनेक्ट करण्याची सिस्टीम
-        setTimeout(async () => {
-            if(window.db) {
-                console.log("Global Server शी कनेक्ट होत आहे...");
+        // वेबसाईट सुरू होताच Real-Time Sync चालू करणे
+        const checkDB = setInterval(() => {
+            if(window.db && window.db.insert) {
+                clearInterval(checkDB);
+                console.log("Firebase Real-Time Sync चालू झाले!");
 
-                // १. Firebase वरून सगळा डेटा 'वाचून' (Read) सर्व विद्यार्थ्यांपर्यंत पोहोचवणे
                 const collectionsToSync = ['users', 'exams', 'questions', 'submissions', 'subjects'];
-                let dataUpdated = false;
-
-                for(let colName of collectionsToSync) {
-                    try {
-                        const snap = await getDocs(collection(cloudDB, colName));
-                        if(!snap.empty) {
-                            if(!window.db.data[colName]) window.db.data[colName] = [];
+                
+                // १. Firebase वरून रिअल-टाईम डेटा वाचणे (वाट्सॲप सारखे)
+                collectionsToSync.forEach(colName => {
+                    onSnapshot(collection(cloudDB, colName), (snapshot) => {
+                        let dataUpdated = false;
+                        if(!window.db.data[colName]) window.db.data[colName] = [];
+                        
+                        snapshot.docChanges().forEach((change) => {
+                            const cloudData = change.doc.data();
                             
-                            snap.forEach(docSnap => {
-                                const cloudData = docSnap.data();
+                            if (change.type === "added" || change.type === "modified") {
                                 const localIndex = window.db.data[colName].findIndex(x => x.id === cloudData.id);
-                                
                                 if(localIndex === -1) {
-                                    window.db.data[colName].push(cloudData); // नवीन डेटा ऍड करणे
-                                    dataUpdated = true;
+                                    window.db.data[colName].push(cloudData);
                                 } else {
-                                    window.db.data[colName][localIndex] = cloudData; // जुना डेटा अपडेट करणे
+                                    window.db.data[colName][localIndex] = cloudData;
                                 }
-                            });
+                                dataUpdated = true;
+                            }
+                            if (change.type === "removed") {
+                                window.db.data[colName] = window.db.data[colName].filter(x => x.id !== cloudData.id);
+                                dataUpdated = true;
+                            }
+                        });
+
+                        if(dataUpdated) {
+                            window.db.save(); // ब्राउझरमध्ये सेव्ह करणे
+                            // जर युजर आधीच लॉगिन असेल, तर डॅशबोर्ड आपोआप रिफ्रेश करणे
+                            if(window.app && window.auth && window.auth.isAuthenticated()) {
+                                window.app.renderCurrentView();
+                            }
                         }
-                    } catch(e) { console.error("डेटा सिंक करताना एरर: ", e); }
-                }
+                    });
+                });
 
-                // जर नवीन डेटा आला असेल तर स्क्रीन रिफ्रेश करणे
-                if(dataUpdated) {
-                    window.db.save(); 
-                    if(window.app) window.app.renderCurrentView();
-                    console.log("ग्लोबल डेटा यशस्वीरित्या सिंक झाला!");
-                }
-
-                // २. नवीन तयार केलेला डेटा थेट Firebase वर 'पाठवणे' (Write)
+                // २. नवीन रजिस्ट्रेशन किंवा एक्झाम डेटा Firebase वर पाठवणे
                 const originalInsert = window.db.insert.bind(window.db);
                 window.db.insert = function(colName, item) {
                     const result = originalInsert(colName, item);
-                    setDoc(doc(cloudDB, colName, result.id), result).catch(e=>console.log(e)); // क्लाउडवर सेव्ह
+                    setDoc(doc(cloudDB, colName, result.id), result).catch(e=>console.error("Firebase Insert Error:", e));
                     return result;
                 };
 
@@ -5743,7 +5748,7 @@ window.app = new App();
                 window.db.update = function(colName, id, updates) {
                     const result = originalUpdate(colName, id, updates);
                     if(result) {
-                        setDoc(doc(cloudDB, colName, id), result, {merge: true}).catch(e=>console.log(e));
+                        setDoc(doc(cloudDB, colName, id), result, {merge: true}).catch(e=>console.error(e));
                     }
                     return result;
                 };
@@ -5752,12 +5757,12 @@ window.app = new App();
                 window.db.delete = function(colName, id) {
                     const result = originalDelete(colName, id);
                     if(result) {
-                        deleteDoc(doc(cloudDB, colName, id)).catch(e=>console.log(e));
+                        deleteDoc(doc(cloudDB, colName, id)).catch(e=>console.error(e));
                     }
                     return result;
                 };
             }
-        }, 1200); // वेबसाईट लोड झाल्यानंतर १ सेकंदाने डेटा कनेक्ट होईल
+        }, 100); // डेटाबेस रेडी असल्याची प्रत्येक ०.१ सेकंदाला खात्री करतो
     </script>
 </body>
 </html>
