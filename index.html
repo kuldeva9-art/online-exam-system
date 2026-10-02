@@ -5676,5 +5676,43 @@ class App {
 
 window.app = new App();
     </script>
+    <!-- 🔥 Firebase Integration Code 🔥 -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
+        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+
+        // तुमचा Firebase Config
+        const firebaseConfig = {
+            apiKey: "AIzaSyAIaxHU7jP-zbHi75N6EmZGG4YqQHiIpi",
+            authDomain: "examflow-af13d.firebaseapp.com",
+            projectId: "examflow-af13d",
+            storageBucket: "examflow-af13d.firebasestorage.app",
+            messagingSenderId: "719331439003",
+            appId: "1:719331439003:web:08208cccddcb476290313e"
+        };
+
+        // Firebase चालू करणे
+        const app = initializeApp(firebaseConfig);
+        const cloudDB = getFirestore(app);
+
+        // जुन्या कोडला धक्का न लावता Firebase ला डेटा पाठवणारी सिस्टीम
+        setTimeout(() => {
+            if(window.db && window.db.insert) {
+                const originalInsert = window.db.insert.bind(window.db);
+                window.db.insert = function(collectionName, item) {
+                    const result = originalInsert(collectionName, item); // जुने काम चालू राहील
+                    
+                    // सोबतच Firebase वर डेटा जाईल
+                    if (collectionName === 'submissions' || collectionName === 'users') {
+                        const docRef = doc(cloudDB, collectionName, result.id);
+                        setDoc(docRef, result)
+                            .then(() => console.log("Firebase वर डेटा यशस्वीरित्या गेला!"))
+                            .catch((e) => console.error("Firebase Error: ", e));
+                    }
+                    return result;
+                };
+            }
+        }, 1000);
+    </script>
 </body>
 </html>
